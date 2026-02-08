@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { Container, Box, Typography } from "@mui/material";
-import { DragDropContext } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable } from "@hello-pangea/dnd";
 import Navbar from "../components/NavBar";
 import PersonBox from "../components/PersonBox";
-import { Droppable } from "@hello-pangea/dnd";
 import AllBox from "../components/AllBox";
 import { useLocation } from "react-router-dom";
 import SplitItem from "../components/SplitItem";
-
 
 function SplitPage() {
     const location = useLocation();
@@ -20,19 +18,34 @@ function SplitPage() {
     const [allItems, setAllItems] = useState([]);
     const [totals, setTotals] = useState({});
 
-    // Update totals
+    // Calculate totals per individual
     useEffect(() => {
+        // Flatten all members for unique individuals
+        const allMembers = Array.from(
+            new Set(people.flatMap((p) => p.members))
+        );
+
         const newTotals = {};
-        people.forEach((p) => {
-            let sum = 0;
-            p.items.forEach((i) => (sum += i.price));
-            newTotals[p.name] = sum;
+        allMembers.forEach((member) => {
+            newTotals[member] = 0;
         });
 
-        const allSum = allItems.reduce((acc, i) => acc + i.price, 0);
-        const split = people.length > 0 ? allSum / people.length : 0;
+        // Add items assigned to people/groups
         people.forEach((p) => {
-            newTotals[p.name] = (newTotals[p.name] || 0) + split;
+            p.items.forEach((item) => {
+                const splitAmount = item.price / p.members.length;
+                p.members.forEach((member) => {
+                    newTotals[member] += splitAmount;
+                });
+            });
+        });
+
+        // Add items in "All" bucket, split among unique individuals
+        allItems.forEach((item) => {
+            const splitAmount = item.price / allMembers.length;
+            allMembers.forEach((member) => {
+                newTotals[member] += splitAmount;
+            });
         });
 
         setTotals(newTotals);
@@ -76,10 +89,11 @@ function SplitPage() {
             setAllItems(allItems.filter((i) => i.id !== draggedItem.id));
         }
 
-        // Drag from person back to items or all
+        // Drag from person/group back to items or All or another person/group
         people.forEach((p) => {
             if (source.droppableId === p.id) {
                 const draggedItem = p.items[source.index];
+
                 if (destination.droppableId === "items") {
                     setItems([...items, draggedItem]);
                 } else if (destination.droppableId === "all") {
@@ -93,6 +107,8 @@ function SplitPage() {
                         )
                     );
                 }
+
+                // Remove from original person/group
                 setPeople((prev) =>
                     prev.map((person) =>
                         person.id === p.id
@@ -142,9 +158,9 @@ function SplitPage() {
                     {/* Bill Summary */}
                     <Box sx={{ mt: 4 }}>
                         <Typography variant="h6">Bill's Split</Typography>
-                        {people.map((p) => (
-                            <Typography key={p.id}>
-                                {p.name}: ${totals[p.name]?.toFixed(2) || 0}
+                        {Object.entries(totals).map(([member, amount]) => (
+                            <Typography key={member}>
+                                {member}: ${amount.toFixed(2)}
                             </Typography>
                         ))}
                     </Box>

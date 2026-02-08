@@ -3,21 +3,15 @@ import { useState } from "react";
 import Navbar from "../components/NavBar";
 import ReceiptBreakdown from "../components/ReceiptBreakdown";
 import PeoplePanel from "../components/PeoplePanel";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import test1 from "../assets/test1.jpg";
 
-function BreakdownPage() {
+function BreakdownPage({ items }) {
     const navigate = useNavigate();
-    const [receiptImage] = useState(
-        "https://via.placeholder.com/300x400.png?text=Receipt+Image"
-    );
+    const location = useLocation();
+    const { receiptImage = null } = location.state || {};
 
-    const [items] = useState([
-        { id: "1", name: "Onigiri", price: 12 },
-        { id: "2", name: "Green Tea", price: 1.5 },
-        { id: "3", name: "Sushi", price: 33 },
-        { id: "4", name: "Ramen", price: 20 },
-        { id: "5", name: "Mochi", price: 5 },
-    ]);
+
 
     const [people, setPeople] = useState([]);
 
