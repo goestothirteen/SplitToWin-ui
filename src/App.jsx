@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import BreakdownPage from "./pages/BreakdownPage";
-import SplitPage from "./pages/Splitpage";
+import SplitPage from "./pages/SplitPage";
 
 function App() {
   // Shared state: items and people
