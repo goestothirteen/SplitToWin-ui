@@ -114,7 +114,7 @@ function BreakdownPage({ items, setItems, people, setPeople, receiptImage, setRe
                     sx={{
                         display: "flex",
                         gap: { xs: 3, md: 3 },
-                        alignItems: "flex-start",
+                        alignItems: { xs: "stretch", md: "flex-start" },
                         flexDirection: { xs: "column", md: "row" },
                     }}
                 >
@@ -125,7 +125,7 @@ function BreakdownPage({ items, setItems, people, setPeople, receiptImage, setRe
                             onItemChange={handleItemChange}
                         />
                     </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ flex: 1, minWidth: 0, width: { xs: "100%", md: "auto" } }}>
                         <PeoplePanel people={people} setPeople={setPeople} />
                         <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 4 }}>
                             <Button

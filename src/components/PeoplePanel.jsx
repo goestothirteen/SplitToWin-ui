@@ -35,14 +35,23 @@ function PeoplePanel({ people, setPeople }) {
                 People / Groups
             </Typography>
 
-            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <Box
+                sx={{
+                    display: "flex",
+                    gap: 2,
+                    mb: 2,
+                    flexDirection: { xs: "column", sm: "row" },
+                    alignItems: { xs: "stretch", sm: "center" },
+                }}
+            >
                 <TextField
+                    fullWidth
                     size="small"
                     label="Add Person or Group (comma-separated)"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                 />
-                <Button variant="contained" onClick={addPersonOrGroup}>
+                <Button variant="contained" onClick={addPersonOrGroup} sx={{ width: { xs: "100%", sm: "auto" } }}>
                     Add
                 </Button>
             </Box>
