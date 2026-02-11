@@ -67,6 +67,8 @@ function BreakdownPage({ items, setItems, people, setPeople, receiptImage, setRe
     async function callBackendOCR(text) {
         const apiBaseUrl =
             import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+        await waitForBackendHealth(apiBaseUrl);
+
         const response = await fetch(`${apiBaseUrl}/parse-receipt`, {
             method: "POST",
             headers: {
@@ -80,6 +82,55 @@ function BreakdownPage({ items, setItems, people, setPeople, receiptImage, setRe
         }
 
         return response.json();
+    }
+
+    async function waitForBackendHealth(apiBaseUrl) {
+        const delayMs = 2500;
+        const timeoutMs = 120000;
+        const maxAttempts = Math.ceil(timeoutMs / delayMs);
+        const healthPaths = ["/healthcheck"];
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            for (const healthPath of healthPaths) {
+                try {
+                    const response = await fetch(`${apiBaseUrl}${healthPath}`, {
+                        method: "GET",
+                    });
+
+                    if (response.ok) {
+                        const contentType = response.headers.get("content-type") || "";
+                        if (contentType.includes("application/json")) {
+                            const data = await response.json();
+                            if (isHealthyPayload(data)) return;
+                        } else {
+                            const text = (await response.text()).trim().toLowerCase();
+                            if (text.includes("healthy")) return;
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Health check attempt ${attempt} failed for ${healthPath}`, error);
+                }
+            }
+
+            if (attempt < maxAttempts) {
+                await sleep(delayMs);
+            }
+        }
+
+        throw new Error("Backend did not become healthy within 2 minutes");
+    }
+
+    function isHealthyPayload(data) {
+        if (!data || typeof data !== "object") return false;
+        const status = typeof data.status === "string" ? data.status.toLowerCase() : "";
+        const health = typeof data.health === "string" ? data.health.toLowerCase() : "";
+        return status === "healthy" || health === "healthy";
+    }
+
+    function sleep(ms) {
+        return new Promise((resolve) => {
+            setTimeout(resolve, ms);
+        });
     }
 
     return (
