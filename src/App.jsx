@@ -83,20 +83,19 @@ export default function App() {
             assignments,
           };
         }),
-      addItem: () =>
+      // Returns the new id so the caller can open it for editing — a blank
+      // line is useless until you type in it.
+      addItem: () => {
+        const id = `manual-${Date.now()}`;
         setState((s) => ({
           ...s,
           items: [
             ...s.items,
-            {
-              id: `manual-${Date.now()}`,
-              name: "",
-              quantity: 1,
-              lineTotal: 0,
-              category: "item",
-            },
+            { id, name: "", quantity: 1, lineTotal: 0, category: "item" },
           ],
-        })),
+        }));
+        return id;
+      },
       setPeople: (updater) =>
         setState((s) => {
           const people = typeof updater === "function" ? updater(s.people) : updater;

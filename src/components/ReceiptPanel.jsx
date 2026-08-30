@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Alert,
   Box,
@@ -13,6 +14,7 @@ import ReceiptItemRow from "./ReceiptItemRow";
 import { formatMoney, isCharge, isFood, toCents } from "../lib/split";
 
 export default function ReceiptPanel({ receiptImage, items, receipt, actions }) {
+  const [editingId, setEditingId] = useState(null);
   const foodCents = items.filter(isFood).reduce((s, i) => s + toCents(i.lineTotal), 0);
   const chargeCents = items
     .filter(isCharge)
@@ -53,17 +55,24 @@ export default function ReceiptPanel({ receiptImage, items, receipt, actions }) 
           <Typography variant="subtitle1" fontWeight={600}>
             Lines
           </Typography>
-          <Button size="small" startIcon={<AddIcon />} onClick={actions.addItem}>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setEditingId(actions.addItem())}
+          >
             Add line
           </Button>
         </Stack>
 
         {/* The parser is good but not infallible, so every field stays
-            editable and the arithmetic below updates as you correct it. */}
+            editable and the arithmetic below updates as you correct it.
+            One row open at a time keeps the list scannable while editing. */}
         {items.map((item) => (
           <ReceiptItemRow
             key={item.id}
             item={item}
+            expanded={editingId === item.id}
+            onToggle={(id) => setEditingId((current) => (current === id ? null : id))}
             onChange={actions.updateItem}
             onRemove={actions.removeItem}
           />
