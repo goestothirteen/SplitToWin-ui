@@ -1,24 +1,51 @@
+import { useState } from "react";
 import {
   Alert,
   Box,
+  Button,
   Divider,
+  IconButton,
   Paper,
+  Snackbar,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import IosShareIcon from "@mui/icons-material/IosShare";
+import QrCode2Icon from "@mui/icons-material/QrCode2";
 
 import { formatMoney } from "../lib/split";
+import { buildShareText, shareText } from "../lib/share";
+import PayNowDialog from "./PayNowDialog";
 
 export default function SummaryPanel({
   split,
   currency,
   chargeMode = "proportional",
   onChargeModeChange,
+  payee,
+  onSavePayee,
+  reference = "",
 }) {
   const { perPerson, unassigned, chargeCents, totalCents, receiptTotalCents } = split;
   const grand = perPerson.reduce((sum, p) => sum + p.totalCents, 0);
+  const [qrPerson, setQrPerson] = useState(null);
+  const [toast, setToast] = useState("");
+
+  const onShare = async () => {
+    const result = await shareText(
+      buildShareText({ perPerson, receiptTotalCents, chargeMode, title: reference })
+    );
+    setToast(
+      result === "copied"
+        ? "Copied — paste it into the chat."
+        : result === "failed"
+          ? "Couldn't share on this device."
+          : ""
+    );
+  };
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
@@ -71,13 +98,26 @@ export default function SummaryPanel({
         <Stack spacing={1}>
           {perPerson.map((p) => (
             <Box key={p.id}>
-              <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography variant="body1" fontWeight={600}>
                   {p.name}
                 </Typography>
-                <Typography variant="h6" fontWeight={700}>
-                  {formatMoney(p.totalCents, currency)}
-                </Typography>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Typography variant="h6" fontWeight={700}>
+                    {formatMoney(p.totalCents, currency)}
+                  </Typography>
+                  {p.totalCents > 0 && onSavePayee && (
+                    <Tooltip title={`PayNow QR for ${p.name}`}>
+                      <IconButton
+                        size="small"
+                        aria-label={`Show PayNow QR for ${p.name}`}
+                        onClick={() => setQrPerson(p)}
+                      >
+                        <QrCode2Icon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Stack>
               </Stack>
               {/* Showing the charge share separately is the point: it is
                   proportional to what each person ate, not an even slice. */}
@@ -135,8 +175,35 @@ export default function SummaryPanel({
               Some lines are still unassigned.
             </Alert>
           )}
+
+          <Button
+            variant="outlined"
+            startIcon={<IosShareIcon />}
+            onClick={onShare}
+            sx={{ mt: 1 }}
+          >
+            Share the split
+          </Button>
         </Stack>
       )}
+
+      <PayNowDialog
+        key={qrPerson?.id || "none"}
+        open={Boolean(qrPerson)}
+        onClose={() => setQrPerson(null)}
+        person={qrPerson}
+        payee={payee}
+        onSavePayee={onSavePayee}
+        reference={reference}
+      />
+
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={3000}
+        onClose={() => setToast("")}
+        message={toast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Paper>
   );
 }

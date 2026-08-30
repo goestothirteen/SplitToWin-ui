@@ -5,6 +5,7 @@ import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 import BreakdownPage from "./pages/BreakdownPage";
 import SplitPage from "./pages/SplitPage";
 import { clearSession, loadSession, saveSession } from "./lib/storage";
+import { loadPayee, savePayee } from "./lib/payee";
 
 const theme = createTheme({
   palette: { primary: { main: "#2e7d5b" } },
@@ -28,6 +29,9 @@ export default function App() {
   // Restored synchronously so a refresh on /split never flashes an empty bill.
   const [state, setState] = useState(() => loadSession() || EMPTY);
   const [receiptImage, setReceiptImage] = useState(null);
+  // Your own PayNow details: the same every dinner, so kept out of the
+  // per-bill session and persisted separately.
+  const [payee, setPayee] = useState(loadPayee);
 
   useEffect(() => {
     saveSession(state);
@@ -105,6 +109,10 @@ export default function App() {
         return id;
       },
       setChargeMode: (chargeMode) => setState((s) => ({ ...s, chargeMode })),
+      savePayee: (next) => {
+        setPayee(next);
+        savePayee(next);
+      },
       setPeople: (updater) =>
         setState((s) => {
           const people = typeof updater === "function" ? updater(s.people) : updater;
@@ -170,7 +178,10 @@ export default function App() {
               />
             }
           />
-          <Route path="/split" element={<SplitPage state={state} actions={actions} />} />
+          <Route
+            path="/split"
+            element={<SplitPage state={state} actions={actions} payee={payee} />}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

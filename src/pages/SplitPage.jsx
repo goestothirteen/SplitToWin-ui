@@ -8,7 +8,7 @@ import NavBar from "../components/NavBar";
 import SummaryPanel from "../components/SummaryPanel";
 import { computeSplit } from "../lib/split";
 
-export default function SplitPage({ state, actions }) {
+export default function SplitPage({ state, actions, payee }) {
   const split = useMemo(
     () =>
       computeSplit({
@@ -69,6 +69,9 @@ export default function SplitPage({ state, actions }) {
                 currency={state.receipt?.currency || ""}
                 chargeMode={state.chargeMode}
                 onChargeModeChange={actions.setChargeMode}
+                payee={payee}
+                onSavePayee={actions.savePayee}
+                reference={state.receipt?.merchant || ""}
               />
             </Box>
           </Box>
