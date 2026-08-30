@@ -1,81 +1,85 @@
-import { Box, Typography, TextField, Button, List, ListItem } from "@mui/material";
 import { useState } from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 
-function PeoplePanel({ people, setPeople }) {
-    const [input, setInput] = useState("");
+let seq = 0;
+// Ids used to be `name.toLowerCase()`, so two people called Mark collided into
+// one droppable target and one merged total. Identity is now independent of
+// the name, which also means renaming someone keeps their items.
+const newId = () => `p${Date.now().toString(36)}${(seq += 1)}`;
 
-    const addPersonOrGroup = () => {
-        if (!input) return;
+export default function PeoplePanel({ people, setPeople }) {
+  const [input, setInput] = useState("");
 
-        // Split by comma for group
-        const names = input.split(",").map((n) => n.trim()).filter(Boolean);
-        if (names.length === 0) return;
+  const add = () => {
+    const names = input
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (names.length === 0) return;
+    setPeople((current) => [
+      ...current,
+      ...names.map((name) => ({ id: newId(), name })),
+    ]);
+    setInput("");
+  };
 
-        if (names.length === 1) {
-            // Single person
-            const id = names[0].toLowerCase();
-            setPeople([...people, { id, name: names[0], members: [id] }]);
-        } else {
-            // Group
-            const members = names.map((n) => n.toLowerCase());
-            const id = "group-" + members.join("-");
-            setPeople([...people, { id, name: names.join(" & "), members }]);
-        }
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+        Who's splitting?
+      </Typography>
 
-        setInput("");
-    };
-
-    const deletePersonOrGroup = (id) => {
-        setPeople(people.filter((p) => p.id !== id));
-    };
-
-    return (
-        <Box sx={{ mt: 4 }}>
-            <Typography variant="h6" gutterBottom>
-                People / Groups
-            </Typography>
-
-            <Box
-                sx={{
-                    display: "flex",
-                    gap: 2,
-                    mb: 2,
-                    flexDirection: { xs: "column", sm: "row" },
-                    alignItems: { xs: "stretch", sm: "center" },
-                }}
-            >
-                <TextField
-                    fullWidth
-                    size="small"
-                    label="Add Person or Group (comma-separated)"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                />
-                <Button variant="contained" onClick={addPersonOrGroup} sx={{ width: { xs: "100%", sm: "auto" } }}>
-                    Add
-                </Button>
-            </Box>
-
-            <List>
-                {people.map((p) => (
-                    <ListItem
-                        key={p.id}
-                        sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                    >
-                        {p.name}
-                        <Button
-                            variant="outlined"
-                            color="error"
-                            size="small"
-                            onClick={() => deletePersonOrGroup(p.id)}
-                        >
-                            Delete
-                        </Button>
-                    </ListItem>
-                ))}
-            </List>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        sx={{ mb: people.length ? 2 : 0 }}
+      >
+        <TextField
+          fullWidth
+          size="small"
+          label="Add names"
+          placeholder="Mark, Amy, Jo"
+          helperText="Separate several with commas"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Box>
+          <Button
+            variant="contained"
+            onClick={add}
+            disabled={!input.trim()}
+            sx={{ width: { xs: "100%", sm: "auto" } }}
+          >
+            Add
+          </Button>
         </Box>
-    );
-}
+      </Stack>
 
-export default PeoplePanel;
+      <Stack direction="row" gap={1} flexWrap="wrap">
+        {people.map((p) => (
+          <Chip
+            key={p.id}
+            label={p.name}
+            onDelete={() =>
+              setPeople((current) => current.filter((x) => x.id !== p.id))
+            }
+          />
+        ))}
+      </Stack>
+    </Paper>
+  );
+}
