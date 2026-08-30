@@ -6,6 +6,7 @@ import BreakdownPage from "./pages/BreakdownPage";
 import SplitPage from "./pages/SplitPage";
 import { clearSession, loadSession, saveSession } from "./lib/storage";
 import { loadPayee, savePayee } from "./lib/payee";
+import { apportion, toCents } from "./lib/split";
 
 const theme = createTheme({
   palette: { primary: { main: "#2e7d5b" } },
@@ -108,6 +109,45 @@ export default function App() {
         }));
         return id;
       },
+      // A receipt line of "3x Egg fried rice" is three separate dishes that
+      // happened to print on one line. Splitting it lets each go to whoever
+      // actually ate it, instead of forcing a throwaway subgroup that cannot
+      // express one person having two.
+      splitItemByQuantity: (id) =>
+        setState((s) => {
+          const item = s.items.find((i) => i.id === id);
+          if (!item || item.quantity < 2) return s;
+
+          // Integer cents, so three ways of $10.00 stays $10.00 and not $9.99.
+          const shares = apportion(
+            toCents(item.lineTotal),
+            Object.fromEntries(
+              Array.from({ length: item.quantity }, (_, n) => [String(n), 1])
+            )
+          );
+          const pieces = Array.from({ length: item.quantity }, (_, n) => ({
+            ...item,
+            id: `${item.id}-u${n + 1}`,
+            quantity: 1,
+            lineTotal: shares[String(n)] / 100,
+          }));
+
+          const index = s.items.findIndex((i) => i.id === id);
+          const items = [
+            ...s.items.slice(0, index),
+            ...pieces,
+            ...s.items.slice(index + 1),
+          ];
+
+          // The original line's assignment carries to every piece, so
+          // splitting something already assigned is not destructive.
+          const assignments = { ...s.assignments };
+          const previous = assignments[id];
+          delete assignments[id];
+          if (previous) pieces.forEach((piece) => (assignments[piece.id] = previous));
+
+          return { ...s, items, assignments };
+        }),
       setChargeMode: (chargeMode) => setState((s) => ({ ...s, chargeMode })),
       savePayee: (next) => {
         setPayee(next);

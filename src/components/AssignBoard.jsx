@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   Divider,
+  ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
@@ -13,6 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
+import CallSplitIcon from "@mui/icons-material/CallSplit";
 
 import { EVERYONE_ID, buildTargets, formatMoney, isFood, toCents } from "../lib/split";
 
@@ -35,6 +37,12 @@ export default function AssignBoard({ state, actions }) {
   const targets = useMemo(() => buildTargets(people, groups), [people, groups]);
   const food = useMemo(() => items.filter(isFood), [items]);
   const unassigned = food.filter((i) => !assignments[i.id]);
+
+  // Only a single multi-quantity line can be split; "assign all" cannot.
+  const splittable =
+    menu && menu.itemIds.length === 1
+      ? food.find((i) => i.id === menu.itemIds[0] && i.quantity > 1)
+      : null;
 
   const openMenu = (event, itemIds) =>
     setMenu({ anchorEl: event.currentTarget, itemIds });
@@ -212,6 +220,27 @@ export default function AssignBoard({ state, actions }) {
       </Paper>
 
       <Menu anchorEl={menu?.anchorEl} open={Boolean(menu)} onClose={closeMenu}>
+        {/* Offered first because for a line like "3x Egg fried rice" it is
+            usually what you want: three separate dishes for three people,
+            rather than one shared thing needing a throwaway subgroup. */}
+        {splittable && [
+          <MenuItem
+            key="split"
+            onClick={() => {
+              actions.splitItemByQuantity(splittable.id);
+              closeMenu();
+            }}
+          >
+            <ListItemIcon>
+              <CallSplitIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary={`Split into ${splittable.quantity} separate items`}
+              secondary="Assign each one to a different person"
+            />
+          </MenuItem>,
+          <Divider key="split-div" />,
+        ]}
         {targets.map((t) => (
           <MenuItem key={t.id} onClick={() => choose(t.id)}>
             <ListItemText
