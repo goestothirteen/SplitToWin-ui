@@ -126,19 +126,32 @@ export function buildTargets(people, groups) {
  *   receiptTotalCents: number|null, reconciles: boolean
  * }}
  */
+export const CHARGE_MODES = {
+  PROPORTIONAL: "proportional",
+  EQUAL: "equal",
+};
+
 export function computeSplit({
   items = [],
   people = [],
   groups = [],
   assignments = {},
   receiptTotal = null,
+  chargeMode = CHARGE_MODES.PROPORTIONAL,
 }) {
   const targets = buildTargets(people, groups);
   const targetById = new Map(targets.map((t) => [t.id, t]));
 
-  const foodCentsByPerson = {};
+  // Exact fractional cents first, rounded once at the very end.
+  //
+  // Rounding each item as it is assigned looked fine but quietly favoured one
+  // person: ties in the remainder always broke in the same order, so whoever
+  // sorted first collected the spare cent on *every* item. Three shared items
+  // put them 3c ahead; a fifteen-line bill would be 10-15c. Accumulating the
+  // exact shares and rounding once caps the whole residue at a single cent.
+  const exactFood = {};
   people.forEach((p) => {
-    foodCentsByPerson[p.id] = 0;
+    exactFood[p.id] = 0;
   });
 
   const unassigned = [];
@@ -152,24 +165,30 @@ export function computeSplit({
     }
     const cents = toCents(item.lineTotal);
     assignedFoodCents += cents;
-    // Even weights within a target: sharing a dish means sharing it equally.
-    const weights = {};
+    // Sharing a dish means sharing it equally.
+    const share = cents / target.memberIds.length;
     target.memberIds.forEach((id) => {
-      weights[id] = 1;
-    });
-    const shares = apportion(cents, weights);
-    Object.entries(shares).forEach(([id, share]) => {
-      foodCentsByPerson[id] = (foodCentsByPerson[id] || 0) + share;
+      exactFood[id] = (exactFood[id] || 0) + share;
     });
   });
 
-  // Charges follow what each person actually ate. While nothing is assigned
-  // yet the weights are all zero and apportion() falls back to an even split,
-  // so the summary is never blank or NaN.
+  const foodCentsByPerson = apportion(assignedFoodCents, exactFood);
+
   const chargeCents = items
     .filter(isCharge)
     .reduce((sum, item) => sum + toCents(item.lineTotal), 0);
-  const chargeByPerson = apportion(chargeCents, foodCentsByPerson);
+
+  // Two defensible ways to handle service charge and tax:
+  //   proportional — you pay tax on what you ordered (the restaurant's own
+  //                  arithmetic, and the fairer default)
+  //   equal        — everyone pays the same share of the extras
+  // While nothing is assigned yet the proportional weights are all zero and
+  // apportion() falls back to an even split, so the summary is never blank.
+  const chargeWeights =
+    chargeMode === "equal"
+      ? Object.fromEntries(people.map((p) => [p.id, 1]))
+      : foodCentsByPerson;
+  const chargeByPerson = apportion(chargeCents, chargeWeights);
 
   const perPerson = people.map((p) => {
     const food = foodCentsByPerson[p.id] || 0;

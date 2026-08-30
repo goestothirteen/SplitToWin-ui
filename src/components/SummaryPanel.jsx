@@ -4,12 +4,19 @@ import {
   Divider,
   Paper,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 
 import { formatMoney } from "../lib/split";
 
-export default function SummaryPanel({ split, currency }) {
+export default function SummaryPanel({
+  split,
+  currency,
+  chargeMode = "proportional",
+  onChargeModeChange,
+}) {
   const { perPerson, unassigned, chargeCents, totalCents, receiptTotalCents } = split;
   const grand = perPerson.reduce((sum, p) => sum + p.totalCents, 0);
 
@@ -18,6 +25,36 @@ export default function SummaryPanel({ split, currency }) {
       <Typography variant="subtitle1" fontWeight={600} gutterBottom>
         Who owes what
       </Typography>
+
+      {/* Both are defensible and tables genuinely disagree about it, so it is
+          a choice rather than a rule. Proportional is the default because it
+          is how the restaurant computed the charges in the first place. */}
+      {chargeCents !== 0 && onChargeModeChange && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75 }}>
+            Service &amp; tax
+          </Typography>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            fullWidth
+            value={chargeMode}
+            onChange={(_, next) => next && onChargeModeChange(next)}
+          >
+            <ToggleButton value="proportional" sx={{ textTransform: "none", py: 0.5 }}>
+              By what you ate
+            </ToggleButton>
+            <ToggleButton value="equal" sx={{ textTransform: "none", py: 0.5 }}>
+              Split evenly
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            {chargeMode === "equal"
+              ? `Everyone pays the same share of ${formatMoney(chargeCents)}.`
+              : `${formatMoney(chargeCents)} shared out in proportion to each person's food.`}
+          </Typography>
+        </Box>
+      )}
 
       {unassigned.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>

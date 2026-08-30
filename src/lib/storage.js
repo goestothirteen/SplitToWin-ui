@@ -36,6 +36,7 @@ export function loadSession() {
           ? parsed.assignments
           : {},
       receipt: parsed.receipt && typeof parsed.receipt === "object" ? parsed.receipt : null,
+      chargeMode: parsed.chargeMode === "equal" ? "equal" : "proportional",
     };
   }, null);
 }
@@ -52,6 +53,7 @@ export function saveSession(state) {
         groups: state.groups,
         assignments: state.assignments,
         receipt: state.receipt,
+        chargeMode: state.chargeMode,
       })
     );
   });

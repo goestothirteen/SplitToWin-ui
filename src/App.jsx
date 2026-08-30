@@ -15,7 +15,14 @@ const theme = createTheme({
   },
 });
 
-const EMPTY = { items: [], people: [], groups: [], assignments: {}, receipt: null };
+const EMPTY = {
+  items: [],
+  people: [],
+  groups: [],
+  assignments: {},
+  receipt: null,
+  chargeMode: "proportional",
+};
 
 export default function App() {
   // Restored synchronously so a refresh on /split never flashes an empty bill.
@@ -43,6 +50,7 @@ export default function App() {
       people: [],
       groups: [],
       assignments: {},
+      chargeMode: "proportional",
       receipt: {
         currency: parsed.currency,
         subtotal: parsed.subtotal,
@@ -96,6 +104,7 @@ export default function App() {
         }));
         return id;
       },
+      setChargeMode: (chargeMode) => setState((s) => ({ ...s, chargeMode })),
       setPeople: (updater) =>
         setState((s) => {
           const people = typeof updater === "function" ? updater(s.people) : updater;

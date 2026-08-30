@@ -17,8 +17,16 @@ export default function SplitPage({ state, actions }) {
         groups: state.groups,
         assignments: state.assignments,
         receiptTotal: state.receipt?.total ?? null,
+        chargeMode: state.chargeMode,
       }),
-    [state.items, state.people, state.groups, state.assignments, state.receipt]
+    [
+      state.items,
+      state.people,
+      state.groups,
+      state.assignments,
+      state.receipt,
+      state.chargeMode,
+    ]
   );
 
   // Reaching /split with nothing loaded used to render a permanently blank
@@ -56,7 +64,12 @@ export default function SplitPage({ state, actions }) {
             {/* Sticky on desktop so the running total stays visible while
                 assigning; a normal block on a phone. */}
             <Box sx={{ position: { md: "sticky" }, top: { md: 88 } }}>
-              <SummaryPanel split={split} currency={state.receipt?.currency || ""} />
+              <SummaryPanel
+                split={split}
+                currency={state.receipt?.currency || ""}
+                chargeMode={state.chargeMode}
+                onChargeModeChange={actions.setChargeMode}
+              />
             </Box>
           </Box>
         </Stack>
