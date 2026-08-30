@@ -106,14 +106,15 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
           )}
         </Stack>
 
-        {/* `capture` opens the camera directly on a phone, which is the
-            common case — you are standing at the table with the bill. */}
+        {/* Deliberately no `capture` attribute: it forces the camera and
+            hides the photo library, so you cannot pick a receipt you already
+            photographed. Without it the phone offers the full chooser —
+            camera, library, and files. */}
         <input
           ref={inputRef}
           type="file"
           hidden
           accept="image/*"
-          capture="environment"
           onChange={handleFile}
         />
 
