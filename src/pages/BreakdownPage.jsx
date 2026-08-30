@@ -1,197 +1,62 @@
-import { Box, Container, Button, CircularProgress, Typography } from "@mui/material";
-import { useState } from "react";
-import Tesseract from "tesseract.js";
-import Navbar from "../components/NavBar";
-import ReceiptBreakdown from "../components/ReceiptBreakdown";
-import PeoplePanel from "../components/PeoplePanel";
+import { Box, Button, Container, Stack } from "@mui/material";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useNavigate } from "react-router-dom";
 
-function BreakdownPage({ items, setItems, people, setPeople, receiptImage, setReceiptImage }) {
-    const navigate = useNavigate();
-    const [loading, setLoading] = useState(false);
+import NavBar from "../components/NavBar";
+import PeoplePanel from "../components/PeoplePanel";
+import ReceiptPanel from "../components/ReceiptPanel";
+import UploadPanel from "../components/UploadPanel";
 
-    const proceedToSplit = () => {
-        navigate("/split", {
-            state: {
-                items,
-                people,
-                receiptImage,
-            },
-        });
-    };
+export default function BreakdownPage({ state, actions, receiptImage }) {
+  const navigate = useNavigate();
+  const hasReceipt = state.items.length > 0;
+  const ready = hasReceipt && state.people.length > 0;
 
-    const handleItemChange = (id, updates) => {
-        setItems((prev) =>
-            prev.map((item) => {
-                if (item.id !== id) return item;
-                const next = { ...item, ...updates };
-                if (Object.prototype.hasOwnProperty.call(updates, "price")) {
-                    const parsed = Number(next.price);
-                    next.price = Number.isNaN(parsed) ? "" : parsed;
-                }
-                return next;
-            })
-        );
-    };
+  return (
+    <>
+      <NavBar showReset={hasReceipt} onReset={actions.reset} />
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Stack spacing={2}>
+          <UploadPanel onParsed={actions.setReceipt} hasReceipt={hasReceipt} />
 
-        setLoading(true);
+          {/* One column on a phone, two on a wide screen. The old split
+              screen had no breakpoints at all and overflowed at 375px. */}
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              alignItems: "start",
+              gridTemplateColumns: { xs: "1fr", md: "minmax(0, 3fr) minmax(0, 2fr)" },
+            }}
+          >
+            <ReceiptPanel
+              receiptImage={receiptImage}
+              items={state.items}
+              receipt={state.receipt}
+              actions={actions}
+            />
 
-        try {
-            const {
-                data: { text },
-            } = await Tesseract.recognize(file, "eng", {
-                logger: (m) => console.log(m),
-            });
+            <Stack spacing={2}>
+              <PeoplePanel people={state.people} setPeople={actions.setPeople} />
 
-            const aiResponse = await callBackendOCR(text);
-
-            const itemsWithIds = aiResponse.items.map((item, idx) => ({
-                id: String(idx + 1),
-                ...item,
-            }));
-            const receiptImageUrl = URL.createObjectURL(file);
-            setItems(itemsWithIds);
-            setReceiptImage(receiptImageUrl);
-        } catch (err) {
-            console.error("Upload flow failed", err);
-            alert("Failed to process receipt. Try a clearer photo.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    async function callBackendOCR(text) {
-        const apiBaseUrl =
-            import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-        await waitForBackendHealth(apiBaseUrl);
-
-        const response = await fetch(`${apiBaseUrl}/parse-receipt`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ ocrText: text }),
-        });
-
-        if (!response.ok) {
-            throw new Error("Backend OCR processing failed");
-        }
-
-        return response.json();
-    }
-
-    async function waitForBackendHealth(apiBaseUrl) {
-        const delayMs = 2500;
-        const timeoutMs = 120000;
-        const maxAttempts = Math.ceil(timeoutMs / delayMs);
-        const healthPaths = ["/healthcheck"];
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-            for (const healthPath of healthPaths) {
-                try {
-                    const response = await fetch(`${apiBaseUrl}${healthPath}`, {
-                        method: "GET",
-                    });
-
-                    if (response.ok) {
-                        const contentType = response.headers.get("content-type") || "";
-                        if (contentType.includes("application/json")) {
-                            const data = await response.json();
-                            if (isHealthyPayload(data)) return;
-                        } else {
-                            const text = (await response.text()).trim().toLowerCase();
-                            if (text.includes("healthy")) return;
-                        }
-                    }
-                } catch (error) {
-                    console.warn(`Health check attempt ${attempt} failed for ${healthPath}`, error);
-                }
-            }
-
-            if (attempt < maxAttempts) {
-                await sleep(delayMs);
-            }
-        }
-
-        throw new Error("Backend did not become healthy within 2 minutes");
-    }
-
-    function isHealthyPayload(data) {
-        if (!data || typeof data !== "object") return false;
-        const status = typeof data.status === "string" ? data.status.toLowerCase() : "";
-        const health = typeof data.health === "string" ? data.health.toLowerCase() : "";
-        return status === "healthy" || health === "healthy";
-    }
-
-    function sleep(ms) {
-        return new Promise((resolve) => {
-            setTimeout(resolve, ms);
-        });
-    }
-
-    return (
-        <>
-            <Navbar />
-
-            <Container maxWidth={false} sx={{ mt: 4 }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                    <Button
-                        variant="contained"
-                        component="label"
-                        disabled={loading}
-                    >
-                        Upload Receipt
-                        <input
-                            type="file"
-                            hidden
-                            accept="image/*"
-                            onChange={handleFileUpload}
-                        />
-                    </Button>
-                    {loading && (
-                        <>
-                            <CircularProgress size={20} />
-                            <Typography variant="body2" color="text.secondary">
-                                Reading receipt with AI...
-                            </Typography>
-                        </>
-                    )}
-                </Box>
-                <Box
-                    sx={{
-                        display: "flex",
-                        gap: { xs: 3, md: 3 },
-                        alignItems: { xs: "stretch", md: "flex-start" },
-                        flexDirection: { xs: "column", md: "row" },
-                    }}
-                >
-                    <Box sx={{ flex: 2, minWidth: 0 }}>
-                        <ReceiptBreakdown
-                            receiptImage={receiptImage}
-                            items={items}
-                            onItemChange={handleItemChange}
-                        />
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0, width: { xs: "100%", md: "auto" } }}>
-                        <PeoplePanel people={people} setPeople={setPeople} />
-                        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 4 }}>
-                            <Button
-                                variant="contained"
-                                onClick={proceedToSplit}
-                                disabled={people.length === 0}
-                            >
-                                Proceed to Split
-                            </Button>
-                        </Box>
-                    </Box>
-                </Box>
-            </Container>
-        </>
-    );
+              <Button
+                variant="contained"
+                size="large"
+                endIcon={<ArrowForwardIcon />}
+                disabled={!ready}
+                onClick={() => navigate("/split")}
+              >
+                {ready
+                  ? "Split the bill"
+                  : hasReceipt
+                    ? "Add someone first"
+                    : "Upload a receipt first"}
+              </Button>
+            </Stack>
+          </Box>
+        </Stack>
+      </Container>
+    </>
+  );
 }
-
-export default BreakdownPage;
