@@ -54,12 +54,18 @@ async function readError(response) {
 
 /**
  * Send the photo and get back structured line items.
+ *
+ * `jobId` makes the call idempotent: if the phone backgrounds the tab and the
+ * connection dies, retrying with the same id returns the result the server
+ * already computed rather than reading the receipt again.
+ *
  * @param {File} file
- * @param {{signal?: AbortSignal}} opts
+ * @param {{signal?: AbortSignal, jobId?: string}} opts
  */
-export async function parseReceipt(file, { signal } = {}) {
+export async function parseReceipt(file, { signal, jobId } = {}) {
   const form = new FormData();
   form.append("image", file);
+  if (jobId) form.append("jobId", jobId);
 
   let response;
   try {

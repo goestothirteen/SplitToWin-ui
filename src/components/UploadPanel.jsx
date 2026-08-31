@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -11,8 +11,9 @@ import {
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 
 import { ApiError, parseReceipt } from "../api/client";
+import { clearPending, loadPending, newJobId, savePending } from "../lib/pending";
 
-// Reading a receipt measured 7-20s, and the variance is upstream load rather
+// Reading a receipt measured 12-30s, and the variance is upstream load rather
 // than anything we control. A bare spinner for that long reads as "hung", so
 // the wait narrates itself instead.
 const STAGES = [
@@ -29,6 +30,9 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
   const inputRef = useRef(null);
   const abortRef = useRef(null);
   const timersRef = useRef([]);
+  // Guards against two resume attempts overlapping — a reload and a
+  // visibility change can otherwise fire almost together.
+  const runningRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -37,12 +41,51 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
     };
   }, []);
 
-  const startNarration = () => {
+  const startNarration = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
-    timersRef.current = STAGES.map((s) =>
-      setTimeout(() => setStage(s.text), s.at)
-    );
-  };
+    timersRef.current = STAGES.map((s) => setTimeout(() => setStage(s.text), s.at));
+  }, []);
+
+  /**
+   * Run one upload. The photo and job id are already stored, so if this call
+   * dies with the tab, `resume` can pick it up again with the same id.
+   */
+  const run = useCallback(
+    async ({ jobId, file, resumed = false }) => {
+      if (runningRef.current) return;
+      runningRef.current = true;
+
+      setError(null);
+      setBusy(true);
+      setStage(resumed ? "Picking up where it left off…" : STAGES[0].text);
+      startNarration();
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const parsed = await parseReceipt(file, { signal: controller.signal, jobId });
+        await clearPending();
+        onParsed(parsed, URL.createObjectURL(file));
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        // The pending record is deliberately left in place: the next time the
+        // page is visible it retries, and the server serves the cached result
+        // if it had already finished.
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Something went wrong reading that receipt."
+        );
+      } finally {
+        timersRef.current.forEach(clearTimeout);
+        abortRef.current = null;
+        runningRef.current = false;
+        setBusy(false);
+      }
+    },
+    [onParsed, startNarration]
+  );
 
   const handleFile = async (event) => {
     const file = event.target.files?.[0];
@@ -50,30 +93,42 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
     event.target.value = "";
     if (!file) return;
 
-    setError(null);
-    setBusy(true);
-    setStage(STAGES[0].text);
-    startNarration();
+    const jobId = newJobId();
+    // Stored *before* the request, so a tab discarded mid-upload can still
+    // find the photo when it reloads.
+    await savePending({ jobId, file });
+    run({ jobId, file });
+  };
 
-    const controller = new AbortController();
-    abortRef.current = controller;
+  // Resume on load and whenever the tab comes back to the foreground. iOS
+  // Safari kills the in-flight request when you switch apps, and may discard
+  // the page entirely — this is what turns that from "the scan died" into a
+  // few seconds of catching up.
+  useEffect(() => {
+    if (hasReceipt) return undefined;
 
-    try {
-      const parsed = await parseReceipt(file, { signal: controller.signal });
-      onParsed(parsed, URL.createObjectURL(file));
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      // A real message, not the old blanket alert("Failed to process receipt").
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong reading that receipt."
-      );
-    } finally {
-      timersRef.current.forEach(clearTimeout);
-      abortRef.current = null;
-      setBusy(false);
-    }
+    let cancelled = false;
+    const resume = async () => {
+      if (cancelled || runningRef.current || document.hidden) return;
+      const pending = await loadPending();
+      if (!pending || cancelled || runningRef.current) return;
+      run({ jobId: pending.jobId, file: pending.file, resumed: true });
+    };
+
+    resume();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("pageshow", resume);
+    };
+  }, [hasReceipt, run]);
+
+  const cancel = async () => {
+    abortRef.current?.abort();
+    await clearPending();
+    setBusy(false);
   };
 
   return (
@@ -94,7 +149,7 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
             {hasReceipt ? "Use a different photo" : "Upload receipt"}
           </Button>
           {busy && (
-            <Button color="inherit" onClick={() => abortRef.current?.abort()}>
+            <Button color="inherit" onClick={cancel}>
               Cancel
             </Button>
           )}
@@ -124,11 +179,33 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
               {stage}
             </Typography>
+            <Typography variant="caption" color="text.disabled">
+              Safe to switch apps — this picks up again when you come back.
+            </Typography>
           </Box>
         )}
 
         {error && (
-          <Alert severity="error" onClose={() => setError(null)}>
+          <Alert
+            severity="error"
+            onClose={() => setError(null)}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={async () => {
+                  const pending = await loadPending();
+                  if (pending) {
+                    run({ jobId: pending.jobId, file: pending.file, resumed: true });
+                  } else {
+                    setError(null);
+                  }
+                }}
+              >
+                Retry
+              </Button>
+            }
+          >
             {error}
           </Alert>
         )}
