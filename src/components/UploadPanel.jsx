@@ -53,6 +53,14 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
   const run = useCallback(
     async ({ jobId, file, resumed = false }) => {
       if (runningRef.current) return;
+      // Belt and braces: an empty file would post a request with no image and
+      // come back as "no image was uploaded", which reads like the app losing
+      // your photo rather than a storage problem.
+      if (!file || file.size === 0) {
+        await clearPending();
+        setError("That photo didn't survive — pick it again.");
+        return;
+      }
       runningRef.current = true;
 
       setError(null);
@@ -198,7 +206,10 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
                   if (pending) {
                     run({ jobId: pending.jobId, file: pending.file, resumed: true });
                   } else {
-                    setError(null);
+                    // Nothing stored to retry with — sending them back to the
+                    // picker is more use than silently dismissing the error.
+                    setError("That photo is no longer available — pick it again.");
+                    inputRef.current?.click();
                   }
                 }}
               >

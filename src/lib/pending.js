@@ -12,8 +12,14 @@
  * the server recognises it and returns the already-parsed result instead of
  * reading the receipt a second time.
  *
- * IndexedDB rather than sessionStorage because this holds a multi-megabyte
- * Blob, which sessionStorage cannot take.
+ * IndexedDB rather than sessionStorage because this holds multiple megabytes
+ * of image data, which sessionStorage cannot take.
+ *
+ * The *bytes* are stored, not the File object. A File is a handle to a file
+ * the OS owns, and that handle does not survive the page being discarded —
+ * it came back undefined, so the retry posted a request with no image and the
+ * server rightly answered "no image was uploaded". An ArrayBuffer is
+ * self-contained data with no such dependency.
  */
 
 const DB_NAME = "splittowin";
@@ -62,19 +68,39 @@ export function newJobId() {
 }
 
 export async function savePending({ jobId, file }) {
+  // Read the bytes out now, while the file handle is still valid.
+  const bytes = await file.arrayBuffer();
   await withStore("readwrite", (store) =>
-    store.put({ jobId, file, name: file.name, type: file.type, at: Date.now() }, KEY)
+    store.put(
+      {
+        jobId,
+        bytes,
+        name: file.name || "receipt.jpg",
+        type: file.type || "image/jpeg",
+        at: Date.now(),
+      },
+      KEY
+    )
   );
 }
 
+/** @returns {Promise<{jobId: string, file: File}|null>} */
 export async function loadPending() {
   const record = await withStore("readonly", (store) => store.get(KEY));
-  if (!record || !record.file) return null;
+  // A record with no usable bytes is worse than none: it would produce an
+  // upload with an empty image. Drop it so the UI asks for a new photo.
+  if (!record?.jobId || !record.bytes || record.bytes.byteLength === 0) {
+    if (record) await clearPending();
+    return null;
+  }
   if (Date.now() - (record.at || 0) > MAX_AGE_MS) {
     await clearPending();
     return null;
   }
-  return record;
+  return {
+    jobId: record.jobId,
+    file: new File([record.bytes], record.name, { type: record.type }),
+  };
 }
 
 export async function clearPending() {
