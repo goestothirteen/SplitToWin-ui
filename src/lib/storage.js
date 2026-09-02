@@ -10,6 +10,8 @@
  * should not still be there next week.
  */
 
+import { normalisePayee } from "./payee";
+
 const KEY = "splittowin.session.v1";
 
 const safe = (fn, fallback) => {
@@ -37,6 +39,10 @@ export function loadSession() {
           : {},
       receipt: parsed.receipt && typeof parsed.receipt === "object" ? parsed.receipt : null,
       chargeMode: parsed.chargeMode === "equal" ? "equal" : "proportional",
+      // Who fronted this bill. Per-sitting, like everything else here: the
+      // next dinner may well be paid for by someone else entirely.
+      payee: normalisePayee(parsed.payee),
+      reference: typeof parsed.reference === "string" ? parsed.reference : "",
     };
   }, null);
 }
@@ -54,6 +60,8 @@ export function saveSession(state) {
         assignments: state.assignments,
         receipt: state.receipt,
         chargeMode: state.chargeMode,
+        payee: state.payee,
+        reference: state.reference,
       })
     );
   });

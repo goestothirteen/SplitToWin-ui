@@ -3,9 +3,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
 import BreakdownPage from "./pages/BreakdownPage";
+import PayPage from "./pages/PayPage";
 import SplitPage from "./pages/SplitPage";
 import { clearSession, loadSession, saveSession } from "./lib/storage";
-import { loadPayee, savePayee } from "./lib/payee";
+import { EMPTY_PAYEE } from "./lib/payee";
 import { apportion, toCents } from "./lib/split";
 
 const theme = createTheme({
@@ -24,15 +25,16 @@ const EMPTY = {
   assignments: {},
   receipt: null,
   chargeMode: "proportional",
+  payee: EMPTY_PAYEE,
+  // Shown on the pay pages and written into the QR, so it turns up on both
+  // statements. The parser has no merchant field, so this is typed in.
+  reference: "",
 };
 
 export default function App() {
   // Restored synchronously so a refresh on /split never flashes an empty bill.
   const [state, setState] = useState(() => loadSession() || EMPTY);
   const [receiptImage, setReceiptImage] = useState(null);
-  // Your own PayNow details: the same every dinner, so kept out of the
-  // per-bill session and persisted separately.
-  const [payee, setPayee] = useState(loadPayee);
 
   useEffect(() => {
     saveSession(state);
@@ -56,6 +58,11 @@ export default function App() {
       groups: [],
       assignments: {},
       chargeMode: "proportional",
+      // A new receipt is a new dinner, and quite possibly a different person
+      // picking up the tab. Carrying the last payee over is how money ends up
+      // pointed at whoever happened to pay last week.
+      payee: EMPTY_PAYEE,
+      reference: "",
       receipt: {
         currency: parsed.currency,
         subtotal: parsed.subtotal,
@@ -149,10 +156,8 @@ export default function App() {
           return { ...s, items, assignments };
         }),
       setChargeMode: (chargeMode) => setState((s) => ({ ...s, chargeMode })),
-      savePayee: (next) => {
-        setPayee(next);
-        savePayee(next);
-      },
+      setPayee: (payee) => setState((s) => ({ ...s, payee })),
+      setReference: (reference) => setState((s) => ({ ...s, reference })),
       setPeople: (updater) =>
         setState((s) => {
           const people = typeof updater === "function" ? updater(s.people) : updater;
@@ -220,8 +225,12 @@ export default function App() {
           />
           <Route
             path="/split"
-            element={<SplitPage state={state} actions={actions} payee={payee} />}
+            element={<SplitPage state={state} actions={actions} />}
           />
+          {/* Stateless and standalone: whoever taps this link has never used
+              the app and has no session. Everything it renders comes out of
+              the URL. */}
+          <Route path="/pay/:payload" element={<PayPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

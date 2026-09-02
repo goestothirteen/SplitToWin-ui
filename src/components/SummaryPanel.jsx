@@ -14,10 +14,13 @@ import {
   Typography,
 } from "@mui/material";
 import IosShareIcon from "@mui/icons-material/IosShare";
+import LinkIcon from "@mui/icons-material/Link";
 import QrCode2Icon from "@mui/icons-material/QrCode2";
 
 import { formatMoney } from "../lib/split";
 import { buildShareText, shareText } from "../lib/share";
+import { EMPTY_PAYEE } from "../lib/payee";
+import PayLinksDialog from "./PayLinksDialog";
 import PayNowDialog from "./PayNowDialog";
 
 export default function SummaryPanel({
@@ -25,13 +28,16 @@ export default function SummaryPanel({
   currency,
   chargeMode = "proportional",
   onChargeModeChange,
-  payee,
+  people = [],
+  payee = EMPTY_PAYEE,
   onSavePayee,
   reference = "",
+  onReferenceChange,
 }) {
   const { perPerson, unassigned, chargeCents, totalCents, receiptTotalCents } = split;
   const grand = perPerson.reduce((sum, p) => sum + p.totalCents, 0);
   const [qrPerson, setQrPerson] = useState(null);
+  const [linksOpen, setLinksOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   const onShare = async () => {
@@ -106,7 +112,7 @@ export default function SummaryPanel({
                   <Typography variant="h6" fontWeight={700}>
                     {formatMoney(p.totalCents, currency)}
                   </Typography>
-                  {p.totalCents > 0 && onSavePayee && (
+                  {p.totalCents > 0 && payee?.proxyValue && (
                     <Tooltip title={`PayNow QR for ${p.name}`}>
                       <IconButton
                         size="small"
@@ -176,16 +182,34 @@ export default function SummaryPanel({
             </Alert>
           )}
 
+          {/* The main way the split leaves this phone. "Share the split" is
+              a summary someone still has to act on; a pay link is the whole
+              transaction, one tap from their banking app. */}
           <Button
-            variant="outlined"
-            startIcon={<IosShareIcon />}
-            onClick={onShare}
+            variant="contained"
+            startIcon={<LinkIcon />}
+            onClick={() => setLinksOpen(true)}
             sx={{ mt: 1 }}
           >
-            Share the split
+            Generate pay links
+          </Button>
+
+          <Button variant="outlined" startIcon={<IosShareIcon />} onClick={onShare}>
+            Share as text
           </Button>
         </Stack>
       )}
+
+      <PayLinksDialog
+        open={linksOpen}
+        onClose={() => setLinksOpen(false)}
+        people={people}
+        perPerson={perPerson}
+        payee={payee}
+        onSavePayee={onSavePayee}
+        reference={reference}
+        onReferenceChange={onReferenceChange}
+      />
 
       <PayNowDialog
         key={qrPerson?.id || "none"}
@@ -193,7 +217,6 @@ export default function SummaryPanel({
         onClose={() => setQrPerson(null)}
         person={qrPerson}
         payee={payee}
-        onSavePayee={onSavePayee}
         reference={reference}
       />
 
