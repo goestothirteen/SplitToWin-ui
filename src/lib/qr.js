@@ -70,6 +70,33 @@ export function downloadDataUrl(dataUrl, filename) {
   link.remove();
 }
 
+/**
+ * Save the QR where a banking app will look for it: the photo album.
+ *
+ * A web page cannot write to the album itself, and a plain download lands in
+ * Files, which PayLah's gallery picker never shows. Handing the image to the
+ * phone's share sheet is the one route that offers "Save Image". Anywhere
+ * that cannot share a file (desktop, older browsers) still gets the download.
+ *
+ * @returns {Promise<"shared"|"downloaded"|"cancelled">}
+ */
+export async function saveImage(dataUrl, filename) {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], filename, { type: blob.type || "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return "shared";
+    }
+  } catch (err) {
+    // Closing the share sheet is a choice, not a failure to paper over
+    // with a surprise download.
+    if (err && err.name === "AbortError") return "cancelled";
+  }
+  downloadDataUrl(dataUrl, filename);
+  return "downloaded";
+}
+
 /** A filename someone can find again in their camera roll. */
 export function qrFilename({ personName, amountCents }) {
   const who = String(personName || "paynow")

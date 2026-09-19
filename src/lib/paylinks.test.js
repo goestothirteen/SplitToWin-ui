@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPayLinks,
+  buildPayLinksHtml,
   buildPayLinksText,
+  payLinkHtml,
   decodePayLink,
   encodePayLink,
   payPath,
@@ -179,5 +181,27 @@ describe("buildPayLinksText", () => {
 
   it("is empty when there is nothing to send", () => {
     expect(buildPayLinksText([])).toBe("");
+  });
+});
+
+describe("buildPayLinksHtml", () => {
+  const links = [
+    { name: "Jon <3", amountCents: 2350, url: "https://x.test/pay/abc" },
+    { name: "Mei", amountCents: 500, url: "https://x.test/pay/def" },
+  ];
+
+  it("folds each URL behind a name-and-amount label", () => {
+    expect(payLinkHtml(links[1])).toBe('<a href="https://x.test/pay/def">Mei — pay S$5.00</a>');
+  });
+
+  it("escapes names and keeps one line per person", () => {
+    const html = buildPayLinksHtml(links, { payeeName: "Mark", reference: "Dinner & drinks" });
+    expect(html).toContain("Jon &lt;3 — pay S$23.50");
+    expect(html).toContain("Dinner &amp; drinks");
+    expect(html.split("<br>")).toHaveLength(4);
+  });
+
+  it("is empty when nobody owes anything", () => {
+    expect(buildPayLinksHtml([])).toBe("");
   });
 });

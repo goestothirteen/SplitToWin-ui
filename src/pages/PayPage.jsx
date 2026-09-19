@@ -17,7 +17,7 @@ import { useParams } from "react-router-dom";
 import NavBar from "../components/NavBar";
 import { decodePayLink } from "../lib/paylinks";
 import { buildPayNowPayload, normaliseMobile, normaliseUen } from "../lib/paynow";
-import { downloadDataUrl, qrFilename, useQrDataUrl } from "../lib/qr";
+import { qrFilename, saveImage, useQrDataUrl } from "../lib/qr";
 
 /**
  * One person's share, opened from a link in the group chat.
@@ -151,7 +151,7 @@ export default function PayPage() {
                 startIcon={<DownloadIcon />}
                 disabled={!dataUrl}
                 onClick={() =>
-                  downloadDataUrl(
+                  saveImage(
                     dataUrl,
                     qrFilename({
                       personName: link.personName,
@@ -160,11 +160,12 @@ export default function PayPage() {
                   )
                 }
               >
-                Save QR image
+                Save QR to photos
               </Button>
 
               <Typography variant="body2" color="text.secondary" textAlign="center">
-                Open PayLah → Scan &amp; Pay → upload this QR from your gallery.
+                Tap “Save Image” when asked, then open PayLah → Scan &amp; Pay → upload
+                it from your gallery.
               </Typography>
               <Typography variant="caption" color="text.secondary" textAlign="center">
                 Or scan it directly from another phone with any Singapore banking

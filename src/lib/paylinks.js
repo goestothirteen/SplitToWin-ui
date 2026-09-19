@@ -192,3 +192,47 @@ export function buildPayLinksText(links, { payeeName, reference } = {}) {
   links.forEach((l) => lines.push(`${l.name}: ${l.url}`));
   return lines.join("\n");
 }
+
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const dollars = (cents) => `S$${(cents / 100).toFixed(2)}`;
+
+/** One person's link as a short clickable label instead of a wall of URL. */
+export function payLinkHtml(link) {
+  return `<a href="${escapeHtml(link.url)}">${escapeHtml(link.name)} — pay ${dollars(link.amountCents)}</a>`;
+}
+
+/**
+ * The same message as buildPayLinksText, with each URL folded behind a
+ * label. Chat apps that accept formatted paste (Telegram) show the label;
+ * the ones that don't (WhatsApp) take the plain text copied alongside it.
+ */
+export function buildPayLinksHtml(links, { payeeName, reference } = {}) {
+  if (!links.length) return "";
+  const who = payeeName ? ` ${escapeHtml(payeeName)}` : "";
+  const what = reference ? ` — ${escapeHtml(reference)}` : "";
+  return [`Your share${what}. Tap your link to pay${who}:`, "", ...links.map(payLinkHtml)].join("<br>");
+}
+
+/**
+ * Put both a formatted and a plain version on the clipboard, so the app
+ * being pasted into picks the best it can show. Falls back to plain text
+ * where the browser cannot write rich content.
+ */
+export async function copyRich(text, html) {
+  if (html && window.ClipboardItem && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        }),
+      ]);
+      return;
+    } catch {
+      // fall through to plain text
+    }
+  }
+  await navigator.clipboard.writeText(text);
+}

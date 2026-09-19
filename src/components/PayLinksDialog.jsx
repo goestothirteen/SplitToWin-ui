@@ -24,7 +24,13 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 import { formatMoney } from "../lib/split";
 import { PROXY_TYPES, validateProxy } from "../lib/paynow";
-import { buildPayLinks, buildPayLinksText } from "../lib/paylinks";
+import {
+  buildPayLinks,
+  buildPayLinksHtml,
+  buildPayLinksText,
+  copyRich,
+  payLinkHtml,
+} from "../lib/paylinks";
 import { loadRecentPayees, rememberPayee } from "../lib/payee";
 
 const SOMEONE_ELSE = "";
@@ -82,6 +88,11 @@ export default function PayLinksDialog({
     [links, payee.payeeName, reference]
   );
 
+  const allHtml = useMemo(
+    () => buildPayLinksHtml(links, { payeeName: payee.payeeName, reference }),
+    [links, payee.payeeName, reference]
+  );
+
   const patch = (next) => onSavePayee({ ...payee, ...next });
 
   // Picking a diner fills their name in as the payee too, but only as a
@@ -92,9 +103,9 @@ export default function PayLinksDialog({
     patch({ personId, payeeName: person ? person.name : payee.payeeName });
   };
 
-  const copy = async (text, what) => {
+  const copy = async (text, what, html) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyRich(text, html);
       // Remembering only once links have actually been taken away keeps
       // half-typed numbers out of the suggestions.
       if (ready) setRecents(rememberPayee(payee));
@@ -289,7 +300,7 @@ export default function PayLinksDialog({
                       <IconButton
                         size="small"
                         aria-label={`Copy ${l.name}'s link`}
-                        onClick={() => copy(l.url, `${l.name}'s link`)}
+                        onClick={() => copy(l.url, `${l.name}'s link`, payLinkHtml(l))}
                       >
                         <ContentCopyIcon fontSize="small" />
                       </IconButton>
@@ -301,7 +312,7 @@ export default function PayLinksDialog({
               <Button
                 variant="contained"
                 startIcon={<ContentCopyIcon />}
-                onClick={() => copy(allText, "All links")}
+                onClick={() => copy(allText, "All links", allHtml)}
                 sx={{ mt: 1 }}
               >
                 Copy all

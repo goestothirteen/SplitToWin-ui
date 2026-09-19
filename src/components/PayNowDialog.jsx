@@ -14,7 +14,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 
 import { formatMoney } from "../lib/split";
 import { buildPayNowPayload, normaliseMobile, normaliseUen } from "../lib/paynow";
-import { downloadDataUrl, qrFilename, useQrDataUrl } from "../lib/qr";
+import { qrFilename, saveImage, useQrDataUrl } from "../lib/qr";
 
 /**
  * One person's QR, shown across the table.
@@ -92,7 +92,7 @@ export default function PayNowDialog({ open, onClose, person, payee, reference }
               startIcon={<DownloadIcon />}
               disabled={!dataUrl}
               onClick={() =>
-                downloadDataUrl(
+                saveImage(
                   dataUrl,
                   qrFilename({
                     personName: person?.name,
@@ -101,7 +101,7 @@ export default function PayNowDialog({ open, onClose, person, payee, reference }
                 )
               }
             >
-              Save QR image
+              Save QR to photos
             </Button>
             <Typography variant="caption" color="text.secondary">
               Paying to {payee.payeeName ? `${payee.payeeName} · ` : ""}
