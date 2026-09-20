@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   LinearProgress,
@@ -10,45 +11,57 @@ import {
 } from "@mui/material";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 
-import { ApiError, parseReceipt } from "../api/client";
+import { ApiError, parseReceipt, resumeParse } from "../api/client";
 import { clearPending, loadPending, newJobId, savePending } from "../lib/pending";
 
-// Reading a receipt measured 12-30s, and the variance is upstream load rather
-// than anything we control. A bare spinner for that long reads as "hung", so
-// the wait narrates itself instead.
-const STAGES = [
-  { at: 0, text: "Uploading the photo…" },
-  { at: 2500, text: "Reading the receipt…" },
-  { at: 8000, text: "Working out the line items…" },
-  { at: 16000, text: "Still going — busy receipt, hang on…" },
-];
+// The wait used to be narrated by a timer: fixed sentences on a schedule,
+// which said "still going" whether the server was reading the receipt or had
+// quietly died. The server now reports what it is actually doing, so this is
+// only the opening line — everything after it comes from the job itself.
+const OPENING = "Sending the photo…";
+
+// A photo that isn't a bill is not an error the person should retry into.
+// They need a different photo, so the panel says so and offers the picker
+// instead of a Retry button that would fail the same way.
+const REJECTIONS = new Set(["not_a_receipt", "no_items"]);
+
+function describe(snapshot) {
+  if (!snapshot) return OPENING;
+  const { stage, detail, itemsFound } = snapshot;
+  if (itemsFound > 0) {
+    return `Reading the lines — ${itemsFound} so far…`;
+  }
+  const base = stage || OPENING;
+  return detail ? `${base} — ${detail}` : `${base}…`;
+}
 
 export default function UploadPanel({ onParsed, hasReceipt }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [stage, setStage] = useState(STAGES[0].text);
+  const [rejected, setRejected] = useState(false);
+  const [stage, setStage] = useState(OPENING);
+  const [elapsed, setElapsed] = useState(0);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
-  const timersRef = useRef([]);
   // Guards against two resume attempts overlapping — a reload and a
   // visibility change can otherwise fire almost together.
   const runningRef = useRef(false);
 
   useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      timersRef.current.forEach(clearTimeout);
-    };
+    return () => abortRef.current?.abort();
   }, []);
 
-  const startNarration = useCallback(() => {
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = STAGES.map((s) => setTimeout(() => setStage(s.text), s.at));
+  const onProgress = useCallback((snapshot) => {
+    setStage(describe(snapshot));
+    if (typeof snapshot?.elapsedSeconds === "number") {
+      setElapsed(Math.round(snapshot.elapsedSeconds));
+    }
   }, []);
 
   /**
    * Run one upload. The photo and job id are already stored, so if this call
-   * dies with the tab, `resume` can pick it up again with the same id.
+   * dies with the tab, `resume` can pick it up again with the same id —
+   * which now means re-attaching to the job, not re-sending the photo.
    */
   const run = useCallback(
     async ({ jobId, file, resumed = false }) => {
@@ -64,35 +77,40 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
       runningRef.current = true;
 
       setError(null);
+      setRejected(false);
       setBusy(true);
-      setStage(resumed ? "Picking up where it left off…" : STAGES[0].text);
-      startNarration();
+      setElapsed(0);
+      setStage(resumed ? "Catching up with the reader…" : OPENING);
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       try {
-        const parsed = await parseReceipt(file, { signal: controller.signal, jobId });
+        const options = { signal: controller.signal, onProgress };
+        const parsed = resumed
+          ? await resumeParse(jobId, file, options)
+          : await parseReceipt(file, { ...options, jobId });
         await clearPending();
         onParsed(parsed, URL.createObjectURL(file));
       } catch (err) {
         if (err?.name === "AbortError") return;
-        // The pending record is deliberately left in place: the next time the
-        // page is visible it retries, and the server serves the cached result
-        // if it had already finished.
+        const isRejection = err instanceof ApiError && REJECTIONS.has(err.code);
+        // A rejected photo will be rejected again, so the stored one goes —
+        // holding it would make the resume-on-focus loop retry it forever.
+        if (isRejection) await clearPending();
+        setRejected(isRejection);
         setError(
           err instanceof ApiError
             ? err.message
             : "Something went wrong reading that receipt."
         );
       } finally {
-        timersRef.current.forEach(clearTimeout);
         abortRef.current = null;
         runningRef.current = false;
         setBusy(false);
       }
     },
-    [onParsed, startNarration]
+    [onParsed, onProgress]
   );
 
   const handleFile = async (event) => {
@@ -110,8 +128,8 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
 
   // Resume on load and whenever the tab comes back to the foreground. iOS
   // Safari kills the in-flight request when you switch apps, and may discard
-  // the page entirely — this is what turns that from "the scan died" into a
-  // few seconds of catching up.
+  // the page entirely — this is what turns that from "the scan died" into
+  // picking the answer back up, usually already finished.
   useEffect(() => {
     if (hasReceipt) return undefined;
 
@@ -137,6 +155,12 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
     abortRef.current?.abort();
     await clearPending();
     setBusy(false);
+  };
+
+  const pickAnother = () => {
+    setError(null);
+    setRejected(false);
+    inputRef.current?.click();
   };
 
   return (
@@ -184,9 +208,21 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
         {busy && (
           <Box>
             <LinearProgress />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-              {stage}
-            </Typography>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="baseline"
+              sx={{ mt: 0.75 }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                {stage}
+              </Typography>
+              {elapsed > 2 && (
+                <Typography variant="caption" color="text.disabled">
+                  {elapsed}s
+                </Typography>
+              )}
+            </Stack>
             <Typography variant="caption" color="text.disabled">
               Safe to switch apps — this picks up again when you come back.
             </Typography>
@@ -195,13 +231,17 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
 
         {error && (
           <Alert
-            severity="error"
+            severity={rejected ? "warning" : "error"}
             onClose={() => setError(null)}
             action={
               <Button
                 color="inherit"
                 size="small"
                 onClick={async () => {
+                  if (rejected) {
+                    pickAnother();
+                    return;
+                  }
                   const pending = await loadPending();
                   if (pending) {
                     run({ jobId: pending.jobId, file: pending.file, resumed: true });
@@ -213,10 +253,11 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
                   }
                 }}
               >
-                Retry
+                {rejected ? "Pick another" : "Retry"}
               </Button>
             }
           >
+            {rejected && <AlertTitle>That photo won't work</AlertTitle>}
             {error}
           </Alert>
         )}

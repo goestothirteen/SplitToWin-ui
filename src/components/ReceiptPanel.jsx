@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Divider,
@@ -14,6 +15,7 @@ import ReceiptItemRow from "./ReceiptItemRow";
 import { formatMoney, isCharge, isFood, toCents } from "../lib/split";
 
 export default function ReceiptPanel({ receiptImage, items, receipt, actions }) {
+  const warnings = receipt?.warnings || [];
   const [editingId, setEditingId] = useState(null);
   const foodCents = items.filter(isFood).reduce((s, i) => s + toCents(i.lineTotal), 0);
   const chargeCents = items
@@ -25,6 +27,21 @@ export default function ReceiptPanel({ receiptImage, items, receipt, actions }) 
 
   return (
     <Stack spacing={2}>
+      {/* What the reader itself said it could not read. Shown at the top,
+          before the lines, because it tells you whether to trust them. */}
+      {warnings.length > 0 && (
+        <Alert severity="info">
+          <AlertTitle>Worth a look</AlertTitle>
+          <Stack component="ul" sx={{ m: 0, pl: 2.5 }} spacing={0.25}>
+            {warnings.map((note) => (
+              <Typography component="li" variant="body2" key={note}>
+                {note}
+              </Typography>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
       {receiptImage && (
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>

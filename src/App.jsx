@@ -69,6 +69,9 @@ export default function App() {
         total: parsed.total,
         discrepancy: parsed.discrepancy,
         provider: parsed.provider,
+        // What the reader could not make out. Kept with the receipt so it
+        // survives a reload, the same as the rest of it.
+        warnings: parsed.warnings || [],
       },
     });
   }, []);
