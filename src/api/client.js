@@ -34,16 +34,20 @@ export class ApiError extends Error {
   }
 }
 
-async function readError(response) {
+/** A response body, or null if there wasn't one we could read. */
+async function readBody(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function readError(response, body) {
   // The API always returns JSON errors now, but a proxy or gateway in front
   // of it might not, so this must never throw while handling a failure.
-  try {
-    const body = await response.json();
-    if (body && typeof body.error === "string") {
-      return new ApiError(body.error, { code: body.code, status: response.status });
-    }
-  } catch {
-    /* fall through */
+  if (body && typeof body.error === "string") {
+    return new ApiError(body.error, { code: body.code, status: response.status });
   }
   if (response.status === 413) {
     return new ApiError("That photo is too large. Try a smaller one.", {
@@ -85,9 +89,13 @@ export async function startParse(file, { signal, jobId } = {}) {
   form.append("image", file);
   if (jobId) form.append("jobId", jobId);
 
+  const path = jobId
+    ? `${BASE}/parse-receipt/${encodeURIComponent(jobId)}`
+    : `${BASE}/parse-receipt`;
+
   let response;
   try {
-    response = await fetch(`${BASE}/parse-receipt`, {
+    response = await fetch(path, {
       method: "POST",
       body: form,
       signal,
@@ -100,17 +108,28 @@ export async function startParse(file, { signal, jobId } = {}) {
     );
   }
 
-  if (!response.ok) throw await readError(response);
-  return response.json();
+  const body = await readBody(response);
+  if (!response.ok) throw readError(response, body);
+  return body;
 }
 
-/** One progress check. Throws only if the poll itself failed. */
+/**
+ * One progress check.
+ *
+ * A failed parse answers with the failure's own status code rather than 200,
+ * so that the access log behind /stats can see that the job went wrong. That
+ * is a reporting concern, not a transport one: the body is a normal progress
+ * snapshot either way, and a snapshot is an answer, not a dropped call. Only
+ * a reply that isn't one — a gateway's HTML, a 404 for a job the server has
+ * forgotten — is thrown.
+ */
 export async function checkParse(jobId, { signal } = {}) {
   const response = await fetch(`${BASE}/parse-receipt/${encodeURIComponent(jobId)}`, {
     signal,
   });
-  if (!response.ok) throw await readError(response);
-  return response.json();
+  const body = await readBody(response);
+  if (body && typeof body.status === "string") return body;
+  throw readError(response, body);
 }
 
 /**

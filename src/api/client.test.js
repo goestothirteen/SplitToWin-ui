@@ -50,7 +50,7 @@ async function drain(promise, ticks = 12) {
 describe("parse polling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   afterEach(() => {
@@ -59,7 +59,7 @@ describe("parse polling", () => {
   });
 
   it("uploads once, then polls until the receipt is ready", async () => {
-    fetch
+    globalThis.fetch
       .mockResolvedValueOnce(json({ jobId: "job1", status: "queued" }, 202))
       .mockResolvedValueOnce(json(running(0)))
       .mockResolvedValueOnce(json(running(3)))
@@ -74,13 +74,46 @@ describe("parse polling", () => {
 
     expect(result).toEqual(RECEIPT);
     // One POST and three polls — the photo is sent exactly once.
-    expect(fetch).toHaveBeenCalledTimes(4);
-    expect(fetch.mock.calls[0][1].method).toBe("POST");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(4);
+    expect(globalThis.fetch.mock.calls[0][1].method).toBe("POST");
     expect(seen).toContain(3);
   });
 
+  it("sends the job id in the upload path so /stats can follow it", async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce(json({ jobId: "abc", status: "queued" }, 202))
+      .mockResolvedValueOnce(json({ jobId: "abc", status: "done", receipt: RECEIPT }));
+
+    await drain(parseReceipt(PHOTO, { jobId: "abc" }));
+    expect(globalThis.fetch.mock.calls[0][0]).toContain("/parse-receipt/abc");
+  });
+
+  it("reads a failed parse off its body even though the code is not 200", async () => {
+    // The API answers a failed job with the failure's own status so the
+    // access log sees it. That must not look like a dropped poll.
+    globalThis.fetch
+      .mockResolvedValueOnce(json({ jobId: "job1", status: "queued" }, 202))
+      .mockResolvedValueOnce(
+        json(
+          {
+            jobId: "job1",
+            status: "failed",
+            error: "Couldn't read that receipt.",
+            code: "parse_failed",
+          },
+          502
+        )
+      );
+
+    await expect(drain(parseReceipt(PHOTO))).rejects.toMatchObject({
+      code: "parse_failed",
+    });
+    // Two calls: the upload and one check. No retry storm on a real failure.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("surfaces a refused photo with the code the panel branches on", async () => {
-    fetch.mockResolvedValueOnce(json({ jobId: "job1", status: "queued" }, 202)).
+    globalThis.fetch.mockResolvedValueOnce(json({ jobId: "job1", status: "queued" }, 202)).
       mockResolvedValueOnce(
         json({
           jobId: "job1",
@@ -97,7 +130,7 @@ describe("parse polling", () => {
   });
 
   it("rides out a dropped poll rather than failing the parse", async () => {
-    fetch
+    globalThis.fetch
       .mockRejectedValueOnce(new TypeError("network"))
       .mockRejectedValueOnce(new TypeError("network"))
       .mockResolvedValueOnce(json({ jobId: "job1", status: "done", receipt: RECEIPT }));
@@ -106,22 +139,22 @@ describe("parse polling", () => {
   });
 
   it("gives up once the polls keep failing", async () => {
-    fetch.mockRejectedValue(new TypeError("network"));
+    globalThis.fetch.mockRejectedValue(new TypeError("network"));
     await expect(drain(awaitParse("job1"))).rejects.toBeInstanceOf(ApiError);
   });
 
   it("resuming re-attaches to the job instead of re-uploading the photo", async () => {
-    fetch.mockResolvedValueOnce(
+    globalThis.fetch.mockResolvedValueOnce(
       json({ jobId: "job1", status: "done", receipt: RECEIPT })
     );
 
     await expect(drain(resumeParse("job1", PHOTO))).resolves.toEqual(RECEIPT);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][1]?.method).toBeUndefined(); // a GET, not the upload
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][1]?.method).toBeUndefined(); // a GET, not the upload
   });
 
   it("resuming a job the server has forgotten sends the photo again", async () => {
-    fetch
+    globalThis.fetch
       .mockResolvedValueOnce(
         json({ error: "That upload has expired.", code: "job_unknown" }, 404)
       )
@@ -129,6 +162,6 @@ describe("parse polling", () => {
       .mockResolvedValueOnce(json({ jobId: "job2", status: "done", receipt: RECEIPT }));
 
     await expect(drain(resumeParse("job1", PHOTO))).resolves.toEqual(RECEIPT);
-    expect(fetch.mock.calls[1][1].method).toBe("POST");
+    expect(globalThis.fetch.mock.calls[1][1].method).toBe("POST");
   });
 });
