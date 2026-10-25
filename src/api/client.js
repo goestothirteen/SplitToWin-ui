@@ -219,6 +219,37 @@ export async function resumeParse(jobId, file, { signal, onProgress } = {}) {
   }
 }
 
+/**
+ * Tell the server who this bill is being split between.
+ *
+ * The server keeps the names against the upload so /stats can show not just
+ * that a receipt was read but who it was for. Sent whenever the list
+ * changes, latest list wins. Fire-and-forget: this is bookkeeping, and a
+ * failure here must never reach the person at the table, so it resolves to
+ * whether it got through and never throws.
+ *
+ * @param {string} jobId  the upload the names belong to
+ * @param {string[]} names
+ * @returns {Promise<boolean>}
+ */
+export async function recordPeople(jobId, names) {
+  if (!jobId) return false;
+  try {
+    const response = await fetch(
+      `${BASE}/parse-receipt/${encodeURIComponent(jobId)}/people`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+        keepalive: true,
+      }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function health() {
   const response = await fetch(`${BASE}/healthz`);
   return response.json();

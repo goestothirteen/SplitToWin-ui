@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
+import { recordPeople } from "./api/client";
 import BreakdownPage from "./pages/BreakdownPage";
 import PayPage from "./pages/PayPage";
 import SplitPage from "./pages/SplitPage";
@@ -40,6 +41,24 @@ export default function App() {
     saveSession(state);
   }, [state]);
 
+  // Let the server know who this bill is for, so /stats can say more than
+  // "a receipt was read". Debounced: names arrive one chip at a time and
+  // only the list as it finally stands matters. Skipped when the list has
+  // not actually changed, which is most renders.
+  const sentPeople = useRef("");
+  useEffect(() => {
+    const jobId = state.receipt?.jobId;
+    if (!jobId) return undefined;
+    const names = state.people.map((p) => p.name);
+    const payload = JSON.stringify(names);
+    if (payload === sentPeople.current) return undefined;
+    const timer = setTimeout(() => {
+      sentPeople.current = payload;
+      recordPeople(jobId, names);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [state.receipt?.jobId, state.people]);
+
   // Blob URLs leak until revoked, and a long dinner can mean several uploads.
   useEffect(() => {
     return () => {
@@ -47,11 +66,14 @@ export default function App() {
     };
   }, [receiptImage]);
 
-  const setReceipt = useCallback((parsed, objectUrl) => {
+  const setReceipt = useCallback((parsed, objectUrl, jobId = null) => {
     setReceiptImage((previous) => {
       if (previous) URL.revokeObjectURL(previous);
       return objectUrl;
     });
+    // A new upload: whatever names were sent for the last one are not
+    // this one's, so the next list goes up even if it reads the same.
+    sentPeople.current = "";
     setState({
       items: parsed.items,
       people: [],
@@ -72,6 +94,9 @@ export default function App() {
         // What the reader could not make out. Kept with the receipt so it
         // survives a reload, the same as the rest of it.
         warnings: parsed.warnings || [],
+        // The upload this receipt came from. Persisted with the receipt so
+        // names added after a reload still reach the right row on the server.
+        jobId: jobId || null,
       },
     });
   }, []);

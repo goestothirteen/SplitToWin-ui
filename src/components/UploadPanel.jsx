@@ -91,7 +91,9 @@ export default function UploadPanel({ onParsed, hasReceipt }) {
           ? await resumeParse(jobId, file, options)
           : await parseReceipt(file, { ...options, jobId });
         await clearPending();
-        onParsed(parsed, URL.createObjectURL(file));
+        // The job id goes with the receipt: it is how the names added later
+        // are tied back to this upload on the server.
+        onParsed(parsed, URL.createObjectURL(file), jobId);
       } catch (err) {
         if (err?.name === "AbortError") return;
         const isRejection = err instanceof ApiError && REJECTIONS.has(err.code);

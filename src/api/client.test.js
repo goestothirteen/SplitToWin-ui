@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, awaitParse, parseReceipt, resumeParse } from "./client";
+import {
+  ApiError,
+  awaitParse,
+  parseReceipt,
+  recordPeople,
+  resumeParse,
+} from "./client";
 
 const PHOTO = new File([new Uint8Array([1, 2, 3])], "receipt.jpg", {
   type: "image/jpeg",
@@ -163,5 +169,38 @@ describe("parse polling", () => {
 
     await expect(drain(resumeParse("job1", PHOTO))).resolves.toEqual(RECEIPT);
     expect(globalThis.fetch.mock.calls[1][1].method).toBe("POST");
+  });
+});
+
+describe("recording who the bill is for", () => {
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts the names against the upload's job id", async () => {
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+
+    await expect(recordPeople("job1", ["Mark", "Amy"])).resolves.toBe(true);
+    const [url, init] = globalThis.fetch.mock.calls[0];
+    expect(url).toContain("/parse-receipt/job1/people");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ names: ["Mark", "Amy"] });
+  });
+
+  it("never throws: a failure is bookkeeping, not the person's problem", async () => {
+    globalThis.fetch.mockRejectedValueOnce(new TypeError("network"));
+    await expect(recordPeople("job1", ["Mark"])).resolves.toBe(false);
+
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 404 });
+    await expect(recordPeople("job1", ["Mark"])).resolves.toBe(false);
+  });
+
+  it("sends nothing without a job id to attach the names to", async () => {
+    await expect(recordPeople(null, ["Mark"])).resolves.toBe(false);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });
