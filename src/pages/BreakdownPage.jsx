@@ -2,6 +2,7 @@ import { Box, Button, Container, Stack } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useNavigate } from "react-router-dom";
 
+import { recordPeople } from "../api/client";
 import NavBar from "../components/NavBar";
 import PeoplePanel from "../components/PeoplePanel";
 import ReceiptPanel from "../components/ReceiptPanel";
@@ -11,6 +12,18 @@ export default function BreakdownPage({ state, actions, receiptImage }) {
   const navigate = useNavigate();
   const hasReceipt = state.items.length > 0;
   const ready = hasReceipt && state.people.length > 0;
+
+  // Going on to split is the moment the bill is really "for" these people,
+  // so this is when the server is told — not as names are typed, which
+  // made every edit look like an event on /stats. Fire-and-forget: the
+  // page changes at once whether or not the note gets through.
+  const splitTheBill = () => {
+    recordPeople(
+      state.receipt?.jobId,
+      state.people.map((p) => p.name)
+    );
+    navigate("/split");
+  };
 
   return (
     <>
@@ -45,7 +58,7 @@ export default function BreakdownPage({ state, actions, receiptImage }) {
                 size="large"
                 endIcon={<ArrowForwardIcon />}
                 disabled={!ready}
-                onClick={() => navigate("/split")}
+                onClick={splitTheBill}
               >
                 {ready
                   ? "Split the bill"

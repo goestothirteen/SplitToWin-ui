@@ -223,10 +223,10 @@ export async function resumeParse(jobId, file, { signal, onProgress } = {}) {
  * Tell the server who this bill is being split between.
  *
  * The server keeps the names against the upload so /stats can show not just
- * that a receipt was read but who it was for. Sent whenever the list
- * changes, latest list wins. Fire-and-forget: this is bookkeeping, and a
- * failure here must never reach the person at the table, so it resolves to
- * whether it got through and never throws.
+ * that a receipt was read but who it was for. Sent when the person goes on
+ * to split the bill; latest list wins. Fire-and-forget: this is
+ * bookkeeping, and a failure here must never reach the person at the
+ * table, so it resolves to whether it got through and never throws.
  *
  * @param {string} jobId  the upload the names belong to
  * @param {string[]} names
